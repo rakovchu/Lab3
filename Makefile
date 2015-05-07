@@ -1,13 +1,13 @@
 CC=gcc
-CFLAGS=-Wall
+CFLAGS=-pthread -Wall
 
 all: server client
 
 server:
-	$(CC) server.c -o server
+	$(CC) $(CFLAGS) server.c -o server
 
 client:
-	$(CC) client.c -o client
+	$(CC) $(CFLAGS) client.c -o client
 
 clean:
 	rm server client

@@ -7,16 +7,47 @@
 #include<sys/socket.h>
 #include<arpa/inet.h> //inet_addr
 #include<unistd.h>    //write
+#include <pthread.h>
 
 #define BUFFER_SIZE 1024
 
-int main(int argc , char *argv[])
+void *thread_func(void *arg)
 {
-    int sock, client_sock, received, read_size;
-    struct sockaddr_in server;
+    int received, read_size;
     char send_buf[BUFFER_SIZE];
     char filename[128];
+    int client_sock = (int)arg;
     FILE *fin;
+
+    printf("Connection accepted\n");
+
+    if ((received = recv(client_sock, filename, 128, 0)) <= 0) {
+        printf("Client disconnected\n");
+        close(client_sock);
+        return;
+    }
+
+    filename[received] = '\0';
+    printf("filename: %s\n", filename);
+    //Send file back to client
+    fin = fopen(filename, "rb");
+    if (!fin) {
+        printf("error: cannot open file %s\n", filename);
+        close(client_sock);
+        return;
+    }
+    while ((read_size = fread(send_buf, 1, BUFFER_SIZE, fin)) > 0)
+        write(client_sock, send_buf, read_size);
+    fclose(fin);
+
+    close(client_sock);
+}
+
+int main(int argc , char *argv[])
+{
+    int sock, client_sock;
+    struct sockaddr_in server;
+    pthread_t thread;
 
     //Create socket
     sock = socket(AF_INET , SOCK_STREAM , 0);
@@ -52,24 +83,9 @@ int main(int argc , char *argv[])
             printf("accept failed\n");
             return 1;
         }
-        printf("Connection accepted\n");
 
-        if (recv(client_sock, filename, 128, 0) <= 0) {
-            printf("Client disconnected\n");
-            break;
-        }
+        pthread_create(&thread, NULL, thread_func, (void*)client_sock);
 
-        //Send file back to client
-        fin = fopen(filename, "rb");
-        if (!fin) {
-            printf("error: cannot open file %s\n", filename);
-            continue;
-        }
-        while ((read_size = fread(send_buf, 1, BUFFER_SIZE, fin)) > 0)
-            write(client_sock, send_buf, read_size);
-        fclose(fin);
-
-        close(client_sock);
     }
 
     close(sock);

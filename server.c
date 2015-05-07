@@ -23,7 +23,7 @@ void *thread_func(void *arg)
     int received, read_size;
     char send_buf[BUFFER_SIZE];
     char filename[128];
-    int client_sock = (int)arg;
+    int client_sock = *(int*)arg;
     FILE *fin;
 
     printf("Connection accepted\n");
@@ -98,7 +98,7 @@ int main(int argc , char *argv[])
 
 #ifdef USE_PTHREAD
         printf("client connected, using pthread to handle...\n");
-        pthread_create(&thread, NULL, thread_func, (void*)client_sock);
+        pthread_create(&thread, NULL, thread_func, (void*)&client_sock);
 #else
         printf("client connected, using fork to handle...\n");
         fork_ret = fork();
@@ -109,7 +109,7 @@ int main(int argc , char *argv[])
 
         if (fork_ret == 0) {       // child process
             close(sock);
-            thread_func((void*)client_sock);
+            thread_func((void*)&client_sock);
             break;
         }
         else                   // parent process

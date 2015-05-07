@@ -2,12 +2,19 @@
     C socket server example
 */
 
-#include<stdio.h>
-#include<string.h>    //strlen
-#include<sys/socket.h>
-#include<arpa/inet.h> //inet_addr
-#include<unistd.h>    //write
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>    //strlen
+#include <sys/socket.h>
+#include <arpa/inet.h> //inet_addr
+#include <unistd.h>
+
+#ifdef USE_PTHREAD
 #include <pthread.h>
+#else
+#include <sys/types.h>
+#include <sys/wait.h>
+#endif
 
 #define BUFFER_SIZE 1024
 
@@ -24,7 +31,7 @@ void *thread_func(void *arg)
     if ((received = recv(client_sock, filename, 128, 0)) <= 0) {
         printf("Client disconnected\n");
         close(client_sock);
-        return;
+        return NULL;
     }
 
     filename[received] = '\0';
@@ -34,20 +41,25 @@ void *thread_func(void *arg)
     if (!fin) {
         printf("error: cannot open file %s\n", filename);
         close(client_sock);
-        return;
+        return NULL;
     }
     while ((read_size = fread(send_buf, 1, BUFFER_SIZE, fin)) > 0)
         write(client_sock, send_buf, read_size);
     fclose(fin);
 
     close(client_sock);
+    return NULL;
 }
 
 int main(int argc , char *argv[])
 {
     int sock, client_sock;
     struct sockaddr_in server;
+#ifdef USE_PTHREAD
     pthread_t thread;
+#else
+    pid_t fork_ret;
+#endif
 
     //Create socket
     sock = socket(AF_INET , SOCK_STREAM , 0);
@@ -60,7 +72,7 @@ int main(int argc , char *argv[])
     //Prepare the sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 8888 );
+    server.sin_port = htons(8888);
 
     //Bind
     if (bind(sock, (struct sockaddr *)&server, sizeof(server)) < 0) {
@@ -84,7 +96,25 @@ int main(int argc , char *argv[])
             return 1;
         }
 
+#ifdef USE_PTHREAD
+        printf("client connected, using pthread to handle...\n");
         pthread_create(&thread, NULL, thread_func, (void*)client_sock);
+#else
+        printf("client connected, using fork to handle...\n");
+        fork_ret = fork();
+        if (fork_ret < 0) {
+            printf("fork failed\n");
+            return 1;
+        }
+
+        if (fork_ret == 0) {       // child process
+            close(sock);
+            thread_func((void*)client_sock);
+            break;
+        }
+        else                   // parent process
+            close(client_sock);
+#endif
 
     }
 
